@@ -26,8 +26,12 @@ def main(args, config):
     diffusers.utils.logging.set_verbosity_info()
 
     time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    savedir = f"{config.output_dir}/{config.output_name}-{time_str}"
-    os.makedirs(savedir)
+    if args.output_folder:
+        savedir = args.output_folder
+        os.makedirs(savedir, exist_ok=True)
+    else:
+        savedir = f"{config.output_dir}/{config.output_name}-{time_str}"
+        os.makedirs(savedir)
 
     samples = []
     sample_idx = 0
@@ -37,7 +41,7 @@ def main(args, config):
         noise_scheduler = DDIMScheduler(**OmegaConf.to_container(config.noise_scheduler_kwargs))
         tokenizer       = CLIPTokenizer.from_pretrained(config.pretrained_model_path, subfolder="tokenizer", use_safetensors=True)
         text_encoder    = CLIPTextModel.from_pretrained(config.pretrained_model_path, subfolder="text_encoder")
-        vae             = AutoencoderKL.from_pretrained(config.pretrained_model_path, subfolder="vae", use_safetensors=True)            
+        vae             = AutoencoderKL.from_pretrained(config.pretrained_model_path, subfolder="vae", use_safetensors=True)
         unet            = VideoLDMUNet3DConditionModel.from_pretrained(
             config.pretrained_model_path,
             subfolder="unet",
@@ -72,7 +76,7 @@ def main(args, config):
 
         pipeline = ConditionalAnimationPipeline(
             vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, unet=unet, scheduler=noise_scheduler)
-    
+
     else:
         pipeline = ConditionalAnimationPipeline.from_pretrained(config.pipeline_pretrained_path)
 
@@ -100,20 +104,20 @@ def main(args, config):
         n_prompts = list(prompt_config.n_prompts) * len(prompts) if len(prompt_config.n_prompts) == 1 else prompt_config.n_prompts
         first_frame_paths = prompt_config.path_to_first_frames
         random_seeds = prompt_config.seeds
-    
+
     if random_seeds == "random":
         random_seeds = [random.randint(0, 1e5) for _ in range(len(prompts))]
     else:
         random_seeds = [random_seeds] if isinstance(random_seeds, int) else list(random_seeds)
         random_seeds = random_seeds * len(prompts) if len(random_seeds) == 1 else random_seeds
-    
+
     config.prompt_kwargs = OmegaConf.create({"random_seeds": [], "prompts": prompts, "n_prompts": n_prompts, "first_frame_paths": first_frame_paths})
     for prompt_idx, (prompt, n_prompt, first_frame_path, random_seed) in enumerate(zip(prompts, n_prompts, first_frame_paths, random_seeds)):
         # manually set random seed for reproduction
         if random_seed != -1: torch.manual_seed(random_seed)
         else: torch.seed()
         config.prompt_kwargs.random_seeds.append(torch.initial_seed())
-        
+
         print(f"current seed: {torch.initial_seed()}")
         print(f"sampling {prompt} ...")
         sample = pipeline(
@@ -139,26 +143,35 @@ def main(args, config):
         samples.append(sample)
 
         prompt = "-".join((prompt.replace("/", "").split(" ")[:10])).replace(":", "")
+        output_name = args.output_name or ''
+
         if sample.shape[0] > 1:
             for cnt, samp in enumerate(sample):
-                save_videos_grid(samp.unsqueeze(0), f"{savedir}/sample/{sample_idx}-{cnt + 1}-{prompt}.{args.format}", format=args.format)
+                save_videos_grid(samp.unsqueeze(0), f"{savedir}/sample/{output_name}{sample_idx}-{cnt + 1}-{prompt}.{args.format}", format=args.format)
         else:
-            save_videos_grid(sample, f"{savedir}/sample/{sample_idx}-{prompt}.{args.format}", format=args.format)
-        print(f"save to {savedir}/sample/{prompt}.{args.format}")
-        
+            if args.disable_metadata_in_animation_name:
+                save_videos_grid(sample, f"{savedir}/{output_name}.{args.format}", format=args.format)
+            else:
+                save_videos_grid(sample, f"{savedir}/sample/{output_name}{sample_idx}-{prompt}.{args.format}", format=args.format)
         sample_idx += 1
 
-    samples = torch.concat(samples)
-    save_videos_grid(samples, f"{savedir}/sample.{args.format}", n_rows=4, format=args.format)
+    if not args.only_output_animation:
+        print(f"save to {savedir}/sample/{prompt}.{args.format}")
+        samples = torch.concat(samples)
+        save_videos_grid(samples, f"{savedir}/sample.{args.format}", n_rows=4, format=args.format)
+        OmegaConf.save(config, f"{savedir}/config.yaml")
 
-    OmegaConf.save(config, f"{savedir}/config.yaml")
-
-    if args.save_model:
-        pipeline.save_pretrained(f"{savedir}/model")
+        if args.save_model:
+            pipeline.save_pretrained(f"{savedir}/model")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--disable_metadata_in_animation_name", action='store_true')
+    parser.add_argument("--only_output_animation", action='store_true')
+    parser.add_argument("--output_name", type=str)
+    parser.add_argument("--output_folder", type=str)
+
     parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
     parser.add_argument("--prompt", "-p", type=str, default=None)
     parser.add_argument("--n_prompt", "-n", type=str, default="")
