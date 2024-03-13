@@ -7,8 +7,8 @@ unet_ckpt_prefix: "module."
 pipeline_pretrained_path: null
 
 sampling_kwargs:
-  height: 128
-  width: 128
+  height: 256
+  width: 256
   n_frames: 16
   steps: 50
   ddim_eta: 0.0
