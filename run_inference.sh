@@ -18,10 +18,10 @@ if [ "${output_format}" != "gif" ] && [ "${output_format}" != "mp4" ]; then
     exit 1
 fi
 
-mkdir -p "${output_folder}" 
+mkdir -p "${output_folder}"
 
 # make prompt file
-prompt_file="prompt_${output_name}.yaml" 
+prompt_file="${output_folder}/prompt_${output_name}.yaml"
 cat <<EOF > "${prompt_file}"
 seeds: random
 
@@ -43,3 +43,4 @@ venv/bin/python -m scripts.animate \
     --output_name "${output_name_noformat}" \
     --output_folder "${output_folder}" \
     --only_output_animation --disable_metadata_in_animation_name
+mv "$prompt_file" "$prompt_file.complete"
