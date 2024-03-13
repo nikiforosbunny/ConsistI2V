@@ -36,7 +36,7 @@ while [ 1 ]; do
 
       # Lock
       touch "$lock_path"
-      bash run.sh "${input_path}" "${output_path}" "${prompt}"
+      bash run_inference.sh "${input_path}" "${output_path}" "${prompt}"
       # dummy
       # -------------------
       # sleep 2s
@@ -52,7 +52,7 @@ while [ 1 ]; do
       rm "$lock_path"
       echo "${timestamp} Finished processing ${configfile}."
     else
-      echo "${timestamp} No input configs to process in ${configs_folder}."
+      echo "${timestamp} No input configs to process in ${configs_folder}"
     fi
   fi # no configs folder
 

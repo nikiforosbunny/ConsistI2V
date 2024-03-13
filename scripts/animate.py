@@ -150,7 +150,9 @@ def main(args, config):
                 save_videos_grid(samp.unsqueeze(0), f"{savedir}/sample/{output_name}{sample_idx}-{cnt + 1}-{prompt}.{args.format}", format=args.format)
         else:
             if args.disable_metadata_in_animation_name:
-                save_videos_grid(sample, f"{savedir}/{output_name}.{args.format}", format=args.format)
+                output_path = f"{savedir}/{output_name}.{args.format}"
+                print("Saving animation to", output_path)
+                save_videos_grid(sample, output_path, format=args.format)
             else:
                 save_videos_grid(sample, f"{savedir}/sample/{output_name}{sample_idx}-{prompt}.{args.format}", format=args.format)
         sample_idx += 1
