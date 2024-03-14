@@ -1,11 +1,16 @@
 #!/bin/env bash
 
+usage() {
+  echo "Usage: $0 <input_path> <output_path> <prompt_text> <python_path> <device>"
+}
+
+[[ $# -lt 5 ]] && usage && exit 1
+
 input_path="$1"
 output_path="$2"
 prompt_text="$3"
-
-[ -z "${input_path}" ] && echo "input_path is required" && exit 1
-[ -z "${output_path}" ] && echo "output_path is required" && exit 1
+python_path="$4"
+device="$5"
 
 output_name="$(basename "${output_path}")"
 output_folder="$(dirname "${output_path}")"
@@ -35,12 +40,13 @@ path_to_first_frames:
   - "${input_path}"
 EOF
 
-
-venv/bin/python -m scripts.animate \
+${python_path} -m scripts.animate \
     --inference_config configs/inference/inference_rest.yaml \
     --prompt_config "${prompt_file}" \
     --format gif \
     --output_name "${output_name_noformat}" \
     --output_folder "${output_folder}" \
-    --only_output_animation --disable_metadata_in_animation_name
+    --device "$device" \
+    --only_output_animation --disable_metadata_in_animation_name || exit 1
+
 mv "$prompt_file" "$prompt_file.complete"

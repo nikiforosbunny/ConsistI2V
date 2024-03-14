@@ -80,7 +80,7 @@ def main(args, config):
     else:
         pipeline = ConditionalAnimationPipeline.from_pretrained(config.pipeline_pretrained_path)
 
-    pipeline.to("cuda")
+    pipeline.to(args.device)
 
     # (frameinit) initialize frequency filter for noise reinitialization -------------
     if config.frameinit_kwargs.enable:
@@ -173,6 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--only_output_animation", action='store_true')
     parser.add_argument("--output_name", type=str)
     parser.add_argument("--output_folder", type=str)
+    parser.add_argument("--device", type=str, default="cuda")
 
     parser.add_argument("--inference_config", type=str, default="configs/inference/inference.yaml")
     parser.add_argument("--prompt", "-p", type=str, default=None)
