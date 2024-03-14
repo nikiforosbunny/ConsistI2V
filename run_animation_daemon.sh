@@ -13,8 +13,12 @@ python_path="$2"
 device="$3"
 sleep_period="$4"
 
-[[ ${configs_folder} != /* ]] && echo "Configs path must be an absolute path" && exit 1
-[[ ${python_path} != /* ]] && echo "Python path must be an absolute path" && exit 1
+[[ -z ${configs_folder} ]] && echo "Got empty value efor configs path" && exit 1
+[[ -z ${python_path} ]] && echo "Got empty value for python path" && exit 1
+[[ ${configs_folder} != /* ]] && echo "Configs path must be an absolute path -- got ${configs_folder}" && exit 1
+[[ ${python_path} != /* ]] && echo "Python path must be an absolute path -- got ${python_path}" && exit 1
+
+
 
 echo "Running animation daemon with params:"
 echo "Configs folder: ${configs_folder}"
