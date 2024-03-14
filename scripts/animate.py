@@ -106,7 +106,7 @@ def main(args, config):
         random_seeds = prompt_config.seeds
 
     if random_seeds == "random":
-        random_seeds = [random.randint(0, 1e5) for _ in range(len(prompts))]
+        random_seeds = [random.randint(0, int(1e5)) for _ in range(len(prompts))]
     else:
         random_seeds = [random_seeds] if isinstance(random_seeds, int) else list(random_seeds)
         random_seeds = random_seeds * len(prompts) if len(random_seeds) == 1 else random_seeds
