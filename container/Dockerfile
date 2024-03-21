@@ -14,5 +14,8 @@ RUN git clone --branch feature/rest-api-functionality https://github.com/nikifor
 WORKDIR /app/
 RUN python -m pip install -r pip_requirements.txt
 RUN python -m pip install -r requirements_worker.txt
+RUN bash download_models.py $(which python) "cpu"
+
+# download models
 
 CMD ["python", "run_consumer.py"]
