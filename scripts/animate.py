@@ -1,4 +1,5 @@
 import argparse
+from collections import namedtuple
 import datetime
 import random
 import os
@@ -168,7 +169,7 @@ def main(args, config):
             pipeline.save_pretrained(f"{savedir}/model")
 
 
-if __name__ == "__main__":
+def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--disable_metadata_in_animation_name", action='store_true')
     parser.add_argument("--only_output_animation", action='store_true')
@@ -186,8 +187,15 @@ if __name__ == "__main__":
     parser.add_argument("--format", type=str, default="mp4", choices=["gif", "mp4"])
     parser.add_argument("--save_model", action="store_true")
     parser.add_argument("optional_args", nargs='*', default=[])
-    args = parser.parse_args()
 
+    return parser
+
+def get_args():
+    parser = get_parser()
+    args = parser.parse_args()
+    return args
+
+def invoke(args):
     config = OmegaConf.load(args.inference_config)
 
     if args.optional_args:
@@ -195,3 +203,46 @@ if __name__ == "__main__":
         config = OmegaConf.merge(config, modified_config)
 
     main(args, config)
+
+
+def call_module(args: dict):
+    """Function to invoke animation from arguments dict
+
+    Args:
+        args (dict): Key-value arguments
+    """
+
+    defaults = {
+        "disable_metadata_in_animation_name": 0,
+        "only_output_animation": 0,
+        "output_name": None,
+        "output_folder": None,
+        "device": 'cuda',
+        "only_load_models": 0,
+        "inference_config": "configs/inference/inference.yaml",
+        "prompt": None,
+        "n_prompt": "",
+        "seed": "random",
+        "path_to_first_frame": None,
+        "prompt_config": "configs/prompts/default.yaml",
+        "format": "mp4",
+        "save_model": 0,
+        "optional_args": []
+    }
+
+    if 'optional_args' in args:
+        defaults['optional_args'].extend(args.pop('optional_args'))
+    actual_args = {**defaults, **args}
+    assert actual_args['format'] in ["gif", "mp4"], f"Anim. format must be 'gif' or 'mp4' -- got {actual_args['format']}"
+
+    keys = sorted(actual_args.keys())
+    values = [actual_args[k] for k in keys]
+    args = namedtuple('args', keys)
+    args = args(*values)
+
+    invoke(args)
+
+if __name__ == "__main__":
+
+    args = get_args()
+    invoke(args)
