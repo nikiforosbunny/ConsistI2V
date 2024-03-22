@@ -22,6 +22,8 @@ db_port = int(os.environ.get("DB_PORT", "27017"))
 heartbeat = int(os.environ.get("HEARTBEAT", 1800))
 broker = instantiate_broker(broker_type, {'heartbeat': heartbeat})
 
+max_request_attempts = int(os.environ.get("MAX_REQUEST_ATTEMPTS", 3))
+
 # mongo init
 mongo_client = MongoClient(db_host, db_port)
 logging.info(f"Connecting to mongo db @ {db_host} -- {db_port} ...")
@@ -67,17 +69,22 @@ def process_request(body: str):
     # message is the task id to process -- retrieve
     task_id = body
     request = db_collection.find_one({"id": task_id})
-    if request['status'] == 'complete':
-        logging.error(f"Received processing request for an already completed animation task: {request['id']}")
+    current_request_attempts = request.get('num_attempts', 0)
+    current_request_attempts += 1
+
+    status = request['status']
+    if status in ('complete', 'failed'):
+        logging.error(f"Received processing request for an animation task with status {status}: {request['id']}")
+        # done, don't requeue
         return True, False
 
-
     try:
-        logging.info(f"Processing message -- request: {request['id']}")
-        db_collection.update_one({'id': task_id}, {'$set': {'status': 'processing'}})
+        logging.info(f"Processing message -- request: {task_id}")
 
         req_id = request.pop('id')
         assert task_id == req_id, f"Message and db task id mismatch: {task_id} != {req_id}"
+
+        db_collection.update_one({'id': task_id}, {'$set': {'status': 'processing', 'num_attempts': current_request_attempts + 1}})
 
         prompt = request.pop('prompt')
         image_b64 = request.pop("image")
@@ -85,7 +92,7 @@ def process_request(body: str):
         anim_format = request.get('animation_format', 'gif')
 
         # write input image
-        image_path = join(inputs_folder, f"{task_id}.png")
+        image_path = join(inputs_folder, f"{task_id}.svg")
         with open(image_path, "wb") as f:
             f.write(image)
 
@@ -127,12 +134,19 @@ def process_request(body: str):
             animation = f.read()
         db_collection.update_one({'id': task_id}, {'$set': {'animation': animation, 'status': 'complete'}})
 
-        # success
+        # success, don't requeue
         return True, False
     except Exception as e:
-        logging.error(f"Worker failed to generate animation for request: {e}")
+        error_msg = f"Failed to generate animation for request: {e}"
+        logging.error(error_msg)
+        all_errors = request.get('errors', []) + [error_msg]
+        db_collection.update_one({'id': task_id}, {'$set': {'errors': all_errors}})
+        reached_max_attempts = current_request_attempts == max_request_attempts
+        if reached_max_attempts:
+            logging.error(f"Reached max number of attempts ({max_request_attempts}) for request: {task_id}")
+            db_collection.update_one({'id': task_id}, {'$set': {'status': 'failed'}})
         # failure, requeue
-        return False, True
+        return False, not reached_max_attempts
 
 def main():
     # Connect to RabbitMQ server

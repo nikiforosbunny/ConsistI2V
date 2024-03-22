@@ -7,7 +7,6 @@ import logging
 # local
 # third-party
 import pika
-import redis
 
 class MessageBroker:
     def publish(self, message: str)->None:
@@ -20,8 +19,8 @@ class MessageBroker:
 
     def consume_callback(self, *args, **kwargs):
         request_body = self.get_request_body(*args, **kwargs)
-        succeeded, should_retry = self.processing_function(request_body)
-        self._handle_processing_result(request_body, succeeded, should_retry, *args, **kwargs)
+        processed, should_retry = self.processing_function(request_body)
+        self._handle_processing_result(request_body, processed, should_retry, *args, **kwargs)
 
 
 class RabbitBroker(MessageBroker):
@@ -47,13 +46,13 @@ class RabbitBroker(MessageBroker):
                             auto_ack=False)
         while True:
             self.channel.start_consuming()
-    
+
     @staticmethod
     def get_request_body(channel, method, properties, body):
         return body.decode('utf8')
 
-    def _handle_processing_result(self, task_id, processing_successful: bool, should_retry: bool, channel, method, properties, body):
-        if processing_successful:
+    def _handle_processing_result(self, task_id, processed: bool, should_retry: bool, channel, method, properties, body):
+        if processed:
             logging.info(f"Successful processing of task_id: {task_id} -- ack'ing")
             self.channel.basic_ack(method.delivery_tag)
             return
