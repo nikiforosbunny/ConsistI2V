@@ -2,6 +2,7 @@
 """
 
 # native
+import time
 import logging
 import base64
 import os
@@ -10,7 +11,7 @@ from os.path import join
 from scripts import animate
 from messaging import instantiate_broker
 # third-party
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,16 +21,24 @@ broker_type = os.environ.get("BROKER_TYPE", "rabbitmq")
 db_host = os.environ.get("DB_HOST")
 db_port = int(os.environ.get("DB_PORT", "27017"))
 heartbeat = int(os.environ.get("HEARTBEAT", 1800))
-broker = instantiate_broker(broker_type, {'heartbeat': heartbeat})
 
 max_request_attempts = int(os.environ.get("MAX_REQUEST_ATTEMPTS", 3))
 
+broker = instantiate_broker(broker_type, {'heartbeat': heartbeat})
+
 # mongo init
-mongo_client = MongoClient(db_host, db_port)
-logging.info(f"Connecting to mongo db @ {db_host} -- {db_port} ...")
-logging.info(f"Connected: {mongo_client.server_info()}")
-db = mongo_client['animation']
-db_collection = db['results']
+while True:
+    try:
+        mongo_client = MongoClient(db_host, db_port)
+        logging.info(f"Connecting to mongo db @ {db_host} -- {db_port} ...")
+        logging.info(f"Connected: {mongo_client.server_info()}")
+        db = mongo_client['animation']
+        db_collection = db['results']
+        break
+    except errors.ServerSelectionTimeoutError as e:
+        logging.error(f"Failed to connect to mongo DB at host:[{db_host}], port: [{db_port}]: {e}")
+        logging.error(f"Retrying in 5 seconds...")
+        time.sleep(5)
 
 
 # set the expected prompt template, formattable
