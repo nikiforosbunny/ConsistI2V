@@ -17,5 +17,6 @@ RUN python -m pip install -r requirements_worker.txt
 RUN bash download_models.sh $(which python) "cpu"
 
 # download models
+RUN cd /app && git pull origin feature/rest-api-functionality
 
 CMD ["python", "run_consumer.py"]

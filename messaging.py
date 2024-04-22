@@ -75,11 +75,13 @@ class RabbitBroker(MessageBroker):
 
     def _handle_processing_result(self, task_id, processed: bool, should_retry: bool, channel, method, properties, body):
         if processed:
-            logging.info(f"Successful processing of task_id: {task_id} -- ack'ing")
+            logging.info(f"Successful processing of task_id: {task_id}.")
             self.channel.basic_ack(method.delivery_tag)
+            logging.info(f"Sent ACK to the message broker.")
             return
-        logging.info(f"Failed processing of task_id: {task_id} -- nack'ing")
+        logging.info(f"Failed processing of task_id: {task_id}.")
         self.channel.basic_nack(delivery_tag=method.delivery_tag, requeue=should_retry)
+        logging.info(f"Sent NACK to the message broker.")
 
 
 

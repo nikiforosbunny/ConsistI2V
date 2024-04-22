@@ -33,7 +33,8 @@ while True:
         logging.info(f"Connecting to mongo db @ {db_host} -- {db_port} ...")
         logging.info(f"Connected: {mongo_client.server_info()}")
         db = mongo_client['animation']
-        db_collection = db['results']
+        images_db = db['images']
+        animations_db = db['results']
         break
     except errors.ServerSelectionTimeoutError as e:
         logging.error(f"Failed to connect to mongo DB at host:[{db_host}], port: [{db_port}]: {e}")
@@ -77,28 +78,34 @@ def process_request(body: str):
     """
     # message is the task id to process -- retrieve
     task_id = body
-    request = db_collection.find_one({"id": task_id})
-    current_request_attempts = request.get('num_attempts', 0)
-    current_request_attempts += 1
+    request = animations_db.find_one({"_id": task_id})
 
     status = request['status']
     if status in ('complete', 'failed'):
-        logging.error(f"Received processing request for an animation task with status {status}: {request['id']}")
+        logging.error(f"Received processing request for an animation task with status {status}: {task_id}")
         # done, don't requeue
         return True, False
 
     try:
-        logging.info(f"Processing message -- request: {task_id}")
+        current_request_attempts = request.get('num_attempts', 0) + 1
+        logging.info(f"Processing message -- request: {task_id}, attempt # {current_request_attempts} / {max_request_attempts}")
+        # log processing attempt
+        animations_db.update_one({'_id': task_id}, {'$set': {'status': 'processing', 'num_attempts': current_request_attempts}})
 
-        req_id = request.pop('id')
+        # check id
+        req_id = request.pop('_id')
         assert task_id == req_id, f"Message and db task id mismatch: {task_id} != {req_id}"
 
-        db_collection.update_one({'id': task_id}, {'$set': {'status': 'processing', 'num_attempts': current_request_attempts + 1}})
-
+        # fetch input data from the entry
+        submitted_by = request.pop('submitted_by')
         prompt = request.pop('prompt')
-        image_b64 = request.pop("image")
-        image = base64.b64decode(image_b64)
+        prompt = prompt if prompt is not None else ''
         anim_format = request.get('animation_format', 'gif')
+
+        # read and decode image from the images db
+        image_id = request.pop('image_id')
+        image_b64 = images_db.find_one({"_id": image_id})['image']
+        image = base64.b64decode(image_b64)
 
         # write input image
         image_path = join(inputs_folder, f"{task_id}.svg")
@@ -110,6 +117,9 @@ def process_request(body: str):
         prompt_file_content = prompt_template.format(input_path=image_path, prompt_text=prompt)
         with open(prompt_path, "w") as f:
             f.write(prompt_file_content)
+
+        # TODO: valid parameter filtering and anim. parameterization
+        parameters = request.pop('parameters', {})
 
         animation_args = {
             "inference_config": "configs/inference/inference_rest.yaml",
@@ -138,23 +148,27 @@ def process_request(body: str):
         # result_path = image_path
         # -----------------
 
-        # update request
+        # write result: animation data, complete status and initialize votes to 50 %
         with open(result_path, 'rb') as f:
             animation = f.read()
-        db_collection.update_one({'id': task_id}, {'$set': {'animation': animation, 'status': 'complete'}})
+        animations_db.update_one({'_id': task_id}, {'$set': {'animation': animation, 'status': 'complete', 'votes': {submitted_by: 0.5}}})
 
         # success, don't requeue
         return True, False
-    except Exception as e:
-        error_msg = f"Failed to generate animation for request: {e}"
+    except Exception as exc:
+        # log error to stdout and db
+        error_msg = f"Failed to generate animation for request: {exc}"
         logging.error(error_msg)
         all_errors = request.get('errors', []) + [error_msg]
-        db_collection.update_one({'id': task_id}, {'$set': {'errors': all_errors}})
+        animations_db.update_one({'_id': task_id}, {'$set': {'errors': all_errors}})
+
+        # check if max number of attempts has been reach for the task
         reached_max_attempts = current_request_attempts == max_request_attempts
         if reached_max_attempts:
-            logging.error(f"Reached max number of attempts ({max_request_attempts}) for request: {task_id}")
-            db_collection.update_one({'id': task_id}, {'$set': {'status': 'failed'}})
-        # failure, requeue
+            # if max number of attempts reached, mark as failed and don't retry
+            logging.error(f"Reached max number of attempts ({max_request_attempts}) without success for request: {task_id}")
+            animations_db.update_one({'_id': task_id}, {'$set': {'status': 'failed'}})
+        # else requeue to retry
         return False, not reached_max_attempts
 
 def main():
