@@ -1,4 +1,4 @@
-""" Entrypoint for animation worker consuming RabbitMQ messages
+""" Entrypoint script for animation worker consuming RabbitMQ messages
 """
 
 # native
@@ -9,7 +9,7 @@ import os
 from os.path import join
 # local
 from scripts import animate
-from messaging import instantiate_broker
+from backend_utils.messaging import instantiate_broker
 # third-party
 from pymongo import MongoClient, errors
 
@@ -20,11 +20,18 @@ assert device in ["cpu", "cuda"], f"Unknown device: {device} -- expected 'cpu' o
 broker_type = os.environ.get("BROKER_TYPE", "rabbitmq")
 db_host = os.environ.get("DB_HOST")
 db_port = int(os.environ.get("DB_PORT", "27017"))
-heartbeat = int(os.environ.get("HEARTBEAT", 1800))
 
 max_request_attempts = int(os.environ.get("MAX_REQUEST_ATTEMPTS", 3))
 
-broker = instantiate_broker(broker_type, {'heartbeat': heartbeat})
+cfg = {
+
+    'heartbeat': int(os.environ.get("HEARTBEAT", 1800)),
+    'host': os.environ.get("BROKER_HOST", 'localhost'),
+    'username': os.environ["BROKER_USER"],
+    'password': os.environ["BROKER_PASSWORD"],
+    'queue_name': 'animation'
+}
+broker = instantiate_broker(broker_type, cfg)
 
 # mongo init
 while True:
@@ -173,6 +180,7 @@ def process_request(body: str):
 
 def main():
     # Connect to RabbitMQ server
+    broker.setup_connection()
     broker.listen(process_request)
 
 if __name__ == "__main__":
